@@ -29,6 +29,7 @@ RUN apk add --no-cache \
     freetype-dev \
     oniguruma-dev \
     libxml2-dev \
+    sqlite-dev \
     pkgconf
 
 # Install PHP extensions
@@ -36,19 +37,26 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg
 
 RUN docker-php-ext-install -j$(nproc) \
     pdo_mysql \
+    pdo_sqlite \
     mbstring \
     bcmath \
     exif \
     gd \
     zip
 
+# Force PHP-FPM to listen on TCP 9000 (some Alpine builds default to unix socket)
+RUN echo "listen = 127.0.0.1:9000" > /usr/local/etc/php-fpm.d/zz-listen.conf
+
 # Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
-# Copy dependency manifests first (layer caching)
-COPY composer.json composer.lock ./
+# Copy only what composer install needs (layer caching)
+COPY composer.json composer.lock artisan ./
+RUN mkdir -p bootstrap/cache
+
+# Install Composer dependencies
 RUN composer install \
     --no-dev \
     --prefer-dist \
@@ -66,9 +74,11 @@ COPY docker/nginx.conf /etc/nginx/http.d/default.conf
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/entrypoint.sh /entrypoint.sh
 
-# Set up storage, cache, and permissions for www-data
+# Create all required directories and set permissions
 RUN mkdir -p storage/framework/{sessions,views,cache} \
+    storage/framework/cache/data \
     storage/logs \
+    storage/app/private \
     bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache \
     && chmod -R 775 storage bootstrap/cache \
