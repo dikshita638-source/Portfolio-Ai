@@ -12,7 +12,6 @@ COPY . .
 
 RUN npm run build
 
-
 # ============================================
 # Stage 2: Production
 # ============================================
@@ -22,7 +21,6 @@ FROM php:8.2-fpm-alpine
 RUN apk add --no-cache \
     nginx \
     supervisor \
-    git \
     unzip \
     zip \
     libzip-dev \
@@ -36,7 +34,7 @@ RUN apk add --no-cache \
 # Install PHP extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg
 
-RUN docker-php-ext-install \
+RUN docker-php-ext-install -j$(nproc) \
     pdo_mysql \
     mbstring \
     bcmath \
@@ -49,17 +47,18 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
-# Copy the whole Laravel project
-COPY . .
-
-# Install Composer dependencies
+# Copy dependency manifests first (layer caching)
+COPY composer.json composer.lock ./
 RUN composer install \
     --no-dev \
     --prefer-dist \
     --no-interaction \
     --optimize-autoloader
 
-# Copy built frontend assets
+# Copy application code
+COPY . .
+
+# Copy built frontend assets from stage 1
 COPY --from=frontend /app/public/build ./public/build
 
 # Copy Docker configs
@@ -67,15 +66,13 @@ COPY docker/nginx.conf /etc/nginx/http.d/default.conf
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/entrypoint.sh /entrypoint.sh
 
-RUN chmod +x /entrypoint.sh
-
-# Laravel permissions
-RUN mkdir -p storage/framework/cache \
-    storage/framework/sessions \
-    storage/framework/views \
+# Set up storage, cache, and permissions for www-data
+RUN mkdir -p storage/framework/{sessions,views,cache} \
     storage/logs \
     bootstrap/cache \
-    && chmod -R 775 storage bootstrap/cache
+    && chown -R www-data:www-data storage bootstrap/cache \
+    && chmod -R 775 storage bootstrap/cache \
+    && chmod +x /entrypoint.sh
 
 EXPOSE 8000
 

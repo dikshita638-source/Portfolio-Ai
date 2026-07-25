@@ -14,7 +14,9 @@ services:
         sync: false
       - key: APP_NAME
         value: Portfolio
-      - key: CACHE_DRIVER
+      - key: DB_CONNECTION
+        value: sqlite
+      - key: CACHE_STORE
         value: file
       - key: SESSION_DRIVER
         value: file
