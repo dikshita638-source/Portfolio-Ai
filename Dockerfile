@@ -44,7 +44,7 @@ RUN docker-php-ext-install -j$(nproc) \
     gd \
     zip
 
-# Force PHP-FPM to listen on TCP 9000 (some Alpine builds default to unix socket)
+# Force PHP-FPM to listen on TCP 9000
 RUN echo "listen = 127.0.0.1:9000" > /usr/local/etc/php-fpm.d/zz-listen.conf
 
 # Install Composer
@@ -52,19 +52,21 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
-# Copy only what composer install needs (layer caching)
-COPY composer.json composer.lock artisan ./
-COPY bootstrap/ bootstrap/
-
-# Install Composer dependencies
+# Step 1: Copy dependency manifests and install without scripts
+COPY composer.json composer.lock ./
 RUN composer install \
     --no-dev \
+    --no-scripts \
+    --no-autoloader \
     --prefer-dist \
-    --no-interaction \
-    --optimize-autoloader
+    --no-interaction
 
-# Copy application code
+# Step 2: Copy full application code
 COPY . .
+
+# Step 3: Now that bootstrap/app.php exists, run autoloader and scripts
+RUN composer dump-autoload --optimize --no-dev \
+    && php artisan package:discover --ansi
 
 # Copy built frontend assets from stage 1
 COPY --from=frontend /app/public/build ./public/build
