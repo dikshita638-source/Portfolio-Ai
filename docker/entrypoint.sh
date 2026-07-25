@@ -3,10 +3,13 @@ set -e
 
 cd /var/www/html
 
-# Generate APP_KEY if not set
-if [ -z "$APP_KEY" ]; then
-    php artisan key:generate --force
+# Create .env from example if it doesn't exist
+if [ ! -f .env ]; then
+    cp .env.example .env
 fi
+
+# Generate APP_KEY if not set
+php artisan key:generate --force
 
 # Run Laravel optimizations
 php artisan config:cache
