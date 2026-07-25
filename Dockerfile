@@ -54,7 +54,7 @@ WORKDIR /var/www/html
 
 # Copy only what composer install needs (layer caching)
 COPY composer.json composer.lock artisan ./
-RUN mkdir -p bootstrap/cache
+COPY bootstrap/ bootstrap/
 
 # Install Composer dependencies
 RUN composer install \
