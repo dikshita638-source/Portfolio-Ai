@@ -25,6 +25,8 @@ RUN apk add --no-cache \
     freetype-dev \
     oniguruma-dev \
     libxml2-dev \
+    libzip-dev \
+    pkgconf \
     zip \
     unzip \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
