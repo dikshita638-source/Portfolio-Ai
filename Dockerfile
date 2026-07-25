@@ -1,76 +1,81 @@
 # ============================================
-# Stage 1: Build frontend assets with Node
+# Stage 1: Build frontend assets
 # ============================================
 FROM node:20-alpine AS frontend
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund
+COPY package*.json ./
+RUN npm ci
 
-COPY vite.config.js tailwind.config.js postcss.config.js ./
-COPY resources/ resources/
+COPY . .
+
 RUN npm run build
 
-# ============================================
-# Stage 2: Production image with PHP + Nginx
-# ============================================
-FROM php:8.2-fpm-alpine AS production
 
-# Install system dependencies
+# ============================================
+# Stage 2: Production
+# ============================================
+FROM php:8.2-fpm-alpine
+
+# Install system packages
 RUN apk add --no-cache \
     nginx \
     supervisor \
+    git \
+    unzip \
+    zip \
+    libzip-dev \
     libpng-dev \
     libjpeg-turbo-dev \
     freetype-dev \
     oniguruma-dev \
     libxml2-dev \
-    libzip-dev \
-    pkgconf \
-    zip \
-    unzip
+    pkgconf
 
-# Configure and install PHP extensions
-# gd must be configured before install
+# Install PHP extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg
 
-RUN docker-php-ext-install -j$(nproc) \
+RUN docker-php-ext-install \
     pdo_mysql \
     mbstring \
-    exif \
     bcmath \
+    exif \
     gd \
     zip
-
-WORKDIR /var/www/html
 
 # Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Copy dependency manifests first for layer caching
-COPY composer.json composer.lock ./
-RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist \
-    && composer dump-autoload --optimize --no-dev
+WORKDIR /var/www/html
 
-# Copy application code
+# Copy the whole Laravel project
 COPY . .
 
-# Copy built frontend assets from stage 1
-COPY --from=frontend /app/public/build/ public/build/
+# Install Composer dependencies
+RUN composer install \
+    --no-dev \
+    --prefer-dist \
+    --no-interaction \
+    --optimize-autoloader
 
-# Copy Docker config files
+# Copy built frontend assets
+COPY --from=frontend /app/public/build ./public/build
+
+# Copy Docker configs
 COPY docker/nginx.conf /etc/nginx/http.d/default.conf
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/entrypoint.sh /entrypoint.sh
+
 RUN chmod +x /entrypoint.sh
 
-# Set directory permissions
-RUN mkdir -p storage/framework/{sessions,views,cache} \
+# Laravel permissions
+RUN mkdir -p storage/framework/cache \
+    storage/framework/sessions \
+    storage/framework/views \
     storage/logs \
     bootstrap/cache \
-    && chown -R www-data:www-data storage bootstrap/cache \
-    && chmod -R 775 storage bootstrap/cache public
+    && chmod -R 775 storage bootstrap/cache
 
 EXPOSE 8000
 
