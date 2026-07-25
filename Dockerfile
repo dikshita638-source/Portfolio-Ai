@@ -17,6 +17,7 @@ RUN npm run build
 # ============================================
 FROM php:8.2-fpm-alpine AS production
 
+# Install system dependencies
 RUN apk add --no-cache \
     nginx \
     supervisor \
@@ -28,19 +29,26 @@ RUN apk add --no-cache \
     libzip-dev \
     pkgconf \
     zip \
-    unzip \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip \
-    && pecl install redis \
-    && docker-php-ext-enable redis \
-    && rm -rf /tmp/pear
+    unzip
+
+# Configure and install PHP extensions
+# gd must be configured before install
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg
+
+RUN docker-php-ext-install -j$(nproc) \
+    pdo_mysql \
+    mbstring \
+    exif \
+    bcmath \
+    gd \
+    zip
 
 WORKDIR /var/www/html
 
 # Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Copy only what's needed for dependency installation first (layer caching)
+# Copy dependency manifests first for layer caching
 COPY composer.json composer.lock ./
 RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist \
     && composer dump-autoload --optimize --no-dev
@@ -51,29 +59,19 @@ COPY . .
 # Copy built frontend assets from stage 1
 COPY --from=frontend /app/public/build/ public/build/
 
-# Copy Nginx config
+# Copy Docker config files
 COPY docker/nginx.conf /etc/nginx/http.d/default.conf
-
-# Run composer post-install scripts (package:discover, etc.)
-RUN composer run-script post-autoload-dump --no-interaction 2>/dev/null || true
-
-# Set permissions
-RUN mkdir -p storage/framework/{sessions,views,cache} \
-    && mkdir -p storage/logs \
-    && mkdir -p bootstrap/cache \
-    && chown -R www-data:www-data storage bootstrap/cache \
-    && chmod -R 775 storage bootstrap/cache \
-    && chmod -R 775 public
-
-# Laravel optimization (only if .env exists at runtime — skipped here safely)
-# These run via the entrypoint script at container start
-
-# Supervisor config to run both PHP-FPM and Nginx
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-
-EXPOSE 8000
-
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+# Set directory permissions
+RUN mkdir -p storage/framework/{sessions,views,cache} \
+    storage/logs \
+    bootstrap/cache \
+    && chown -R www-data:www-data storage bootstrap/cache \
+    && chmod -R 775 storage bootstrap/cache public
+
+EXPOSE 8000
 
 ENTRYPOINT ["/entrypoint.sh"]
