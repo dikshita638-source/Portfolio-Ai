@@ -41,8 +41,7 @@ php artisan config:cache 2>&1
 echo "[entrypoint] Running route:cache..."
 php artisan route:cache 2>&1
 
-echo "[entrypoint] Running view:cache..."
-php artisan view:cache 2>&1
+echo "[entrypoint] Skipping view:cache to keep @vite() dynamic"
 
 echo "[entrypoint] Optimization complete"
 
