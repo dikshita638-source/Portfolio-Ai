@@ -11,7 +11,7 @@ services:
       - key: APP_KEY
         generateValue: true
       - key: APP_URL
-        value: https://portfolio.onrender.com
+        value: https://portfolio-ai-vjv6.onrender.com
       - key: APP_NAME
         value: Portfolio
       - key: DB_CONNECTION
